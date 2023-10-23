@@ -99,7 +99,7 @@ def _parse_args():
     else:
         parsed.db_path = []
 
-    if len(parsed.db_path) == 0:
+    if not parsed.db_path:
         print(
             f"WARNING: --db-path does not point to a valid database: {parsed.db_path}"
         )
@@ -179,10 +179,7 @@ def _setup_model_path(args):  # pylint: disable=too-many-branches
 def validate_config(model_path: str):
     if os.path.exists(os.path.join(model_path, "mlc-chat-config.json")):
         raise KeyError(
-            "The model located in the directory {} has already been compiled by MLC-LLM. There is"
-            " no need to compile it again. If you wish to compile a new model, please provide a"
-            " directory (or hf-path) that contains the pre-compiled model in raw HuggingFace"
-            " format instead.".format(model_path)
+            f"The model located in the directory {model_path} has already been compiled by MLC-LLM. There is no need to compile it again. If you wish to compile a new model, please provide a directory (or hf-path) that contains the pre-compiled model in raw HuggingFace format instead."
         )
     config_path = os.path.join(model_path, "config.json")
     assert os.path.exists(

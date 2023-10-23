@@ -19,9 +19,11 @@ session = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     chat_mod = ChatModule(ARGS.device_name, ARGS.device_id)
-    model_path = os.path.join(ARGS.artifact_path, ARGS.model + "-" + ARGS.quantization)
-    model_dir = ARGS.model + "-" + ARGS.quantization
-    model_lib = model_dir + "-" + ARGS.device_name + ".so"
+    model_path = os.path.join(
+        ARGS.artifact_path, f"{ARGS.model}-{ARGS.quantization}"
+    )
+    model_dir = f"{ARGS.model}-{ARGS.quantization}"
+    model_lib = f"{model_dir}-{ARGS.device_name}.so"
     lib_dir = os.path.join(model_path, model_lib)
     prebuilt_lib_dir = os.path.join(ARGS.artifact_path, "prebuilt", "lib", model_lib)
     if os.path.exists(lib_dir):
@@ -69,8 +71,7 @@ def _parse_args():
     args.add_argument("--device-id", type=int, default=0)
     args.add_argument("--port", type=int, default=8000)
 
-    parsed = args.parse_args()
-    return parsed
+    return args.parse_args()
 
 
 class AsyncChatCompletionStream:
@@ -79,16 +80,13 @@ class AsyncChatCompletionStream:
 
     async def get_next_msg(self):
         session["chat_mod"].decode()
-        msg = session["chat_mod"].get_message()
-        return msg
+        return session["chat_mod"].get_message()
 
     async def __anext__(self):
-        if not session["chat_mod"].stopped():
-            task = asyncio.create_task(self.get_next_msg())
-            msg = await task
-            return msg
-        else:
+        if session["chat_mod"].stopped():
             raise StopAsyncIteration
+        task = asyncio.create_task(self.get_next_msg())
+        return await task
 
 
 @app.post("/v1/chat/completions")

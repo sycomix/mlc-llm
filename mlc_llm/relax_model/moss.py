@@ -424,8 +424,7 @@ class MossModel(nn.Module):
                 past_key_value=past_key_value,
                 all_seq_len_shape=all_seq_len_shape,
             )
-            present_kv_cache.append(present_k_cache)
-            present_kv_cache.append(present_v_cache)
+            present_kv_cache.extend((present_k_cache, present_v_cache))
         hidden_states = self.ln_f(hidden_states)
         return hidden_states, present_kv_cache
 
@@ -486,10 +485,8 @@ def check_parameters(param_dict, param_list):
     shape_dict_1 = {k: list(v.shape) for (k, v) in param_list}
     assert len(shape_dict_0) == len(shape_dict_1)
     for k, v in shape_dict_0.items():
-        assert k in shape_dict_1, "{}".format(k)
-        assert v == shape_dict_1[k], "key={}, shape_0={}, shape_1={}".format(
-            k, v, shape_dict_1[k]
-        )
+        assert k in shape_dict_1, f"{k}"
+        assert v == shape_dict_1[k], f"key={k}, shape_0={v}, shape_1={shape_dict_1[k]}"
 
 
 def create_encoding_func(
@@ -527,8 +524,7 @@ def create_encoding_func(
             ]
             named_params = named_parameters(model)
             check_parameters(named_params, ordered_params)
-            for name, _ in ordered_params:
-                params.append(named_params[name])
+            params.extend(named_params[name] for name, _ in ordered_params)
             gv = bb.emit_output((logits, relax.Tuple(key_value_cache)))
         bb.emit_func_output(gv, params)
     mod = bb.get()
@@ -572,8 +568,7 @@ def create_decoding_func(
             ]
             named_params = named_parameters(model)
             check_parameters(named_params, ordered_params)
-            for name, _ in ordered_params:
-                params.append(named_params[name])
+            params.extend(named_params[name] for name, _ in ordered_params)
             gv = bb.emit_output((logits, relax.Tuple(key_value_cache)))
         bb.emit_func_output(gv, params)
     mod = bb.get()

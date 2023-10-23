@@ -56,10 +56,10 @@ def emit_encoding(builder: relax.BlockBuilder, weight: relax.Expr, quant_dtype: 
         weight,
         primfunc_name_hint="quant_encoding",
     )
-    encoded_data = []
-    for i in range(5):
-        encoded_data.append(builder.emit(stop_lift_params(relax.TupleGetItem(data, i))))
-    return encoded_data
+    return [
+        builder.emit(stop_lift_params(relax.TupleGetItem(data, i)))
+        for i in range(5)
+    ]
 
 
 def decoding_func(input_dtype, quant_dtype: str):
@@ -93,6 +93,9 @@ class RWKVQuantize:
         mod: IRModule,
         ctx: tvm.transform.PassContext,  # pylint: disable=unused-argument
     ) -> IRModule:
+
+
+
         @mutator
         class QuantizeMutator(PyExprMutator):
             def __init__(
@@ -112,7 +115,7 @@ class RWKVQuantize:
                 for global_var, func in self.mod.functions.items():
                     if not isinstance(func, relax.Function):
                         continue
-                    if func.attrs is None or not "num_input" in func.attrs:
+                    if func.attrs is None or "num_input" not in func.attrs:
                         continue
                     num_inputs = func.attrs["num_input"]
                     for i in range(int(num_inputs), len(func.params)):
@@ -140,5 +143,6 @@ class RWKVQuantize:
                     return self.quantize_matmul(call)
                 else:
                     return call
+
 
         return QuantizeMutator(mod, self.mode, self.dtype).transform()

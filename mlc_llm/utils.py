@@ -27,6 +27,9 @@ class Quantization:
 # Preset compilation modes (configuring quantization and model dtype).
 # The value tuple denotes
 # (quantization_mode, quantization_sym, quantization_storage_nbit, model_dtype)
+# Preset compilation modes (configuring quantization and model dtype).
+# The value tuple denotes
+# (quantization_mode, quantization_sym, quantization_storage_nbit, model_dtype)
 quantization_dict = {
     "q3f16_0": Quantization(
         name="q3f16_0", mode="int3", sym=True, storage_nbit=16, model_dtype="float16"
@@ -51,7 +54,7 @@ quantization_dict = {
     ),
 }
 
-supported_model_types = set(["llama", "gpt_neox", "gpt_bigcode", "moss", "rwkv"])
+supported_model_types = {"llama", "gpt_neox", "gpt_bigcode", "moss", "rwkv"}
 
 
 def argparse_postproc_common(args: argparse.Namespace) -> None:
@@ -102,8 +105,8 @@ def split_transform_deploy_mod(
     transform_func_name = None
     gv_names = [gv.name_hint for gv in mod.get_global_vars()]
     for name in model_names:
-        if name + "_transform_params" in gv_names:
-            transform_func_name = name + "_transform_params"
+        if f"{name}_transform_params" in gv_names:
+            transform_func_name = f"{name}_transform_params"
     assert transform_func_name is not None
 
     for gv in mod.functions:
@@ -231,7 +234,7 @@ def transform_params(
                 for param_name, param in f_convert_param_bkwd(
                     torch_param_name, raw_param
                 ):
-                    if param_name in pname2pidx.keys():
+                    if param_name in pname2pidx:
                         assert pname2pidx[param_name] not in loaded_params_dict
                         loaded_params_dict[pname2pidx[param_name]] = tvm.nd.array(
                             param, device_cpu
@@ -268,9 +271,8 @@ def transform_params(
 def save_params(params: List[tvm.nd.NDArray], artifact_path: str) -> None:
     from tvm.contrib import tvmjs  # pylint: disable=import-outside-toplevel
 
-    meta_data = {}
     param_dict = {}
-    meta_data["ParamSize"] = len(params)
+    meta_data = {"ParamSize": len(params)}
     total_size = 0.0
     for i, nd in enumerate(params):
         param_dict[f"param_{i}"] = nd
@@ -287,11 +289,8 @@ def load_params(artifact_path: str, device) -> List[tvm.nd.NDArray]:
     from tvm.contrib import tvmjs  # pylint: disable=import-outside-toplevel
 
     params, meta = tvmjs.load_ndarray_cache(f"{artifact_path}/params", device)
-    plist = []
     size = meta["ParamSize"]
-    for i in range(size):
-        plist.append(params[f"param_{i}"])
-    return plist
+    return [params[f"param_{i}"] for i in range(size)]
 
 
 def build_model_from_log(relax_mod, target, log_dir):

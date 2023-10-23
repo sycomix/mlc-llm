@@ -38,7 +38,7 @@ def _tir_u32_to_int_to_float(nbit: int, val: tir.PrimExpr, pos: tir.PrimExpr, dt
 
 
 def _tir_packed_uint_to_uint_to_float(storage_nbit: int):
-    storage_dtype = "uint" + str(storage_nbit)
+    storage_dtype = f"uint{storage_nbit}"
 
     def f_convert(nbit: int, val: tir.PrimExpr, pos: tir.PrimExpr, dtype: str):
         assert val.dtype == storage_dtype
@@ -154,7 +154,7 @@ def encoding_func(sym: bool, group_size: int, nbit: int, mode: str, storage_nbit
             return (max_value / tir.const(max_int_value, dtype)) if mode.startswith("int") else max_value
 
         scale = te.compute(shape=scale_min_shape, fcompute=f_compute_scale, name="scale")
-        storage_dtype = ("uint" + str(storage_nbit)) if mode.startswith("int") else "uint32"
+        storage_dtype = f"uint{storage_nbit}" if mode.startswith("int") else "uint32"
 
         def f_scale_weight(i, j):
             group_idx = j // group_size
@@ -294,6 +294,9 @@ class GroupQuantize:
     def transform_module(
         self, mod: IRModule, ctx: tvm.transform.PassContext
     ) -> IRModule:
+
+
+
         @mutator
         class QuantizeMutator(PyExprMutator):
             def __init__(
@@ -319,7 +322,7 @@ class GroupQuantize:
                 for global_var, func in self.mod.functions.items():
                     if not isinstance(func, relax.Function):
                         continue
-                    if not "num_input" in func.attrs:
+                    if "num_input" not in func.attrs:
                         continue
                     num_inputs = func.attrs["num_input"]
                     for i in range(int(num_inputs), len(func.params)):
@@ -344,10 +347,7 @@ class GroupQuantize:
                     primfunc_name_hint="encode",
                 )
 
-                decode_args = []
-                decode_args.append(
-                    self.builder_.emit(relax.TupleGetItem(encoded_data, 0))
-                )
+                decode_args = [self.builder_.emit(relax.TupleGetItem(encoded_data, 0))]
                 decode_args.append(
                     self.builder_.emit(relax.TupleGetItem(encoded_data, 1))
                 )
@@ -432,6 +432,7 @@ class GroupQuantize:
                     return self.quantize_take(call)
                 else:
                     return call
+
 
         return QuantizeMutator(
             mod, self.group_size, self.sym, self.mode, self.storage_nbit, self.dtype

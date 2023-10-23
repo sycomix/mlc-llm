@@ -82,12 +82,11 @@ class Embedding(nn.Module):
         ndim = x.struct_info.ndim
         if ndim == 1:
             return nn.emit(take(self.weight, x, axis=0))
-        else:
-            x_shape = x.struct_info.shape.values
-            emb_size = self.weight.struct_info.shape.values[-1]
-            x = nn.emit(reshape(x, shape=[-1]))
-            embedding = nn.emit(take(self.weight, x, axis=0))
-            return nn.emit(reshape(embedding, [*x_shape, emb_size]))
+        x_shape = x.struct_info.shape.values
+        emb_size = self.weight.struct_info.shape.values[-1]
+        x = nn.emit(reshape(x, shape=[-1]))
+        embedding = nn.emit(take(self.weight, x, axis=0))
+        return nn.emit(reshape(embedding, [*x_shape, emb_size]))
 
 
 class LlamaRMSNorm(nn.Module):
@@ -112,7 +111,7 @@ class LlamaRMSNorm(nn.Module):
             square_sum = te.compute(
                 (x.shape[0], x.shape[1]),
                 lambda bsz, i: te.sum(f_square(x[bsz, i, k]), axis=k),
-                name=x.op.name + "red_temp",
+                name=f"{x.op.name}red_temp",
             )
 
             def f_div_cast(bsz, i, k):
@@ -448,19 +447,17 @@ class LlamaModel(nn.Module):
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         if isinstance(input_shape[-1], tvm.tir.Var) or input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, dtype, src_len)
-        else:
-            # Get src_len from input parameters
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            bsz, tgt_len = input_shape
-            combined_attention_mask = nn.emit(
-                relax.op.full(
-                    (bsz, 1, tgt_len, src_len),
-                    relax.const(tvm.tir.max_value(dtype).value, dtype),
-                    dtype,
-                )
+            return _make_causal_mask(input_shape, dtype, src_len)
+        # Get src_len from input parameters
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        bsz, tgt_len = input_shape
+        return nn.emit(
+            relax.op.full(
+                (bsz, 1, tgt_len, src_len),
+                relax.const(tvm.tir.max_value(dtype).value, dtype),
+                dtype,
             )
-        return combined_attention_mask
+        )
 
     def forward(
         self,
@@ -644,18 +641,17 @@ def create_kv_cache_func(bb: relax.BlockBuilder, config: LlamaConfig) -> None:
     with bb.function("create_kv_cache", []):
         with bb.dataflow():
             zeros = bb.emit(relax.op.zeros(init_shape, config.dtype))
-            caches = []
             f_kv_cache_create = relax.extern("vm.builtin.attention_kv_cache_create")
-            for _ in range(config.num_hidden_layers * 2):
-                caches.append(
-                    bb.emit(
-                        relax.Call(
-                            f_kv_cache_create,
-                            args=[zeros, init_shape, relax.PrimValue(0)],
-                            sinfo_args=[relax.ObjectStructInfo()],
-                        )
+            caches = [
+                bb.emit(
+                    relax.Call(
+                        f_kv_cache_create,
+                        args=[zeros, init_shape, relax.PrimValue(0)],
+                        sinfo_args=[relax.ObjectStructInfo()],
                     )
                 )
+                for _ in range(config.num_hidden_layers * 2)
+            ]
             gv = bb.emit_output(caches)
         bb.emit_func_output(gv)
 

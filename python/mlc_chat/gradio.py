@@ -24,8 +24,7 @@ def _parse_args():
         help="create a publicly shareable link for the interface",
     )
     args.add_argument("--port", type=int, default=7860)
-    parsed = args.parse_args()
-    return parsed
+    return args.parse_args()
 
 
 def _check_model_dir(dir):
@@ -57,7 +56,7 @@ class GradioChatModule(ChatModule):
     def reload_model(self, model_name, text_input, chat_state, img_list):
         model_lib, model_dir = None, os.path.join(self.artifact_path, model_name)
         for path in glob.glob(os.path.join(model_dir, "*")):
-            if path.split("/")[-1].startswith(model_name + "-" + self.device_name):
+            if path.split("/")[-1].startswith(f"{model_name}-{self.device_name}"):
                 model_lib = path
                 break
         assert model_lib is not None
@@ -103,9 +102,7 @@ class GradioChatModule(ChatModule):
                 new_msg = self.get_message()
                 new_utf8_chars = new_msg.encode("utf-8")
                 pos = first_idx_mismatch(cur_utf8_chars, new_utf8_chars)
-                print_msg = ""
-                for _ in range(pos, len(cur_utf8_chars)):
-                    print_msg += "\b \b"
+                print_msg = "".join("\b \b" for _ in range(pos, len(cur_utf8_chars)))
                 for j in range(pos, len(new_utf8_chars)):
                     print_msg += chr(new_utf8_chars[j])
                 cur_utf8_chars = new_utf8_chars
@@ -189,10 +186,14 @@ def launch_gradio(chat_mod, share_link=False):
 
 def first_idx_mismatch(str1, str2):
     """Find the first index that mismatch in two strings."""
-    for i, (char1, char2) in enumerate(zip(str1, str2)):
-        if char1 != char2:
-            return i
-    return min(len(str1), len(str2))
+    return next(
+        (
+            i
+            for i, (char1, char2) in enumerate(zip(str1, str2))
+            if char1 != char2
+        ),
+        min(len(str1), len(str2)),
+    )
 
 
 if __name__ == "__main__":
